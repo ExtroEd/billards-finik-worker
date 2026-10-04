@@ -1,0 +1,25 @@
+/**
+ * Example Wrangler configuration file
+ * Copy this file to wrangler.jsonc and fill in your real credentials
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "billards-finik-worker",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-09-21",
+	"observability": {
+		"enabled": true
+	},
+	"upload_source_maps": true,
+	"kv_namespaces": [
+		{
+			"binding": "BILLIARDS_KV",
+			"id": "YOUR_KV_NAMESPACE_ID"
+		}
+	],
+	"vars": {
+		"MQTT_BROKER_URL": "mqtts://YOUR_BROKER_HOST:8883",
+		"MQTT_USER": "YOUR_MQTT_USER",
+		"MQTT_PASS": "YOUR_MQTT_PASSWORD"
+	}
+}

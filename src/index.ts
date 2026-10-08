@@ -21,22 +21,57 @@ export default {
       // 🤖 1. Входящий Webhook от Telegram Bot
       if (bodyJson.message && bodyJson.message.chat) {
         const chatId = String(bodyJson.message.chat.id);
-        const text = bodyJson.message.text || "";
+        const text = (bodyJson.message.text || "").trim();
 
         const isChef = chatId === env.TG_CHEF_CHAT_ID;
         const isDev = chatId === env.TG_DEV_CHAT_ID;
 
         if (isChef || isDev) {
-          if (text.includes("Получить информацию") || text.includes("/status") || text.includes("/start")) {
-            console.log(`🤖 Telegram command from ${isChef ? "Chef" : "Dev"}: ${text}`);
+          const parts = text.split(" ");
+          const cmd = parts[0].toLowerCase();
+          const targetTableNum = parts[1] || "4"; // По умолчанию стол №4, если не указан
+          const argValue = parts[2] ? Number(parts[2]) : null;
 
-            const targetTopic = "billiards/all/cmd";
-            const payload = {
+          const targetTopic = `billiards/klubnyy15_table${targetTableNum}/cmd`;
+
+          // 📊 Запрос отчёта
+          if (text.includes("Получить информацию") || cmd === "/status" || cmd === "/start") {
+            // Если надали кнопку "Получить информацию", шлем запрос во все столы или в конкретный
+            const topic = cmd === "/status" && parts[1] ? targetTopic : "billiards/all/cmd";
+            ctx.waitUntil(sendMqttWebSocket(env, topic, {
               event: "REQUEST_STATUS",
               requestedBy: chatId
-            };
-
-            ctx.waitUntil(sendMqttWebSocket(env, targetTopic, payload));
+            }));
+          } 
+          // 🧹 Сброс времени/сессии стола (/reset 4)
+          else if (cmd === "/reset") {
+            ctx.waitUntil(sendMqttWebSocket(env, targetTopic, {
+              event: "RESET_SESSION",
+              requestedBy: chatId
+            }));
+          } 
+          // 💰 Инкассация/Сброс кассы (/resetcash 4)
+          else if (cmd === "/resetcash") {
+            ctx.waitUntil(sendMqttWebSocket(env, targetTopic, {
+              event: "RESET_CASH",
+              requestedBy: chatId
+            }));
+          } 
+          // ⚙️ Смена цены за 1 час (/setprice 4 200)
+          else if (cmd === "/setprice" && argValue) {
+            ctx.waitUntil(sendMqttWebSocket(env, targetTopic, {
+              event: "SET_PRICE_1H",
+              value: argValue,
+              requestedBy: chatId
+            }));
+          } 
+          // 🎯 Смена минимального старта (/setmin 4 50)
+          else if (cmd === "/setmin" && argValue) {
+            ctx.waitUntil(sendMqttWebSocket(env, targetTopic, {
+              event: "SET_MIN_THRESHOLD",
+              value: argValue,
+              requestedBy: chatId
+            }));
           }
         }
         return new Response("OK", { status: 200 });
@@ -84,9 +119,6 @@ export default {
   }
 };
 
-/**
- * Публикация через WebSocket MQTT для EMQX
- */
 async function sendMqttWebSocket(env: Env, topic: string, payload: any): Promise<void> {
   return new Promise((resolve, reject) => {
     const host = (env.MQTT_BROKER_URL || "")
@@ -111,7 +143,7 @@ async function sendMqttWebSocket(env: Env, topic: string, payload: any): Promise
       connectTimeout: 8000,
       reconnectPeriod: 0,
       clean: true,
-      rejectUnauthorized: false // Предотвращает ошибки сертификатов со стороны Worker
+      rejectUnauthorized: false
     });
 
     const timeout = setTimeout(() => {

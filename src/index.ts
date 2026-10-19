@@ -63,36 +63,6 @@ export default {
         const targetTableNum = parts[1];
         const argValue = parts[2] ? Number(parts[2]) : null;
 
-        // 💳 4. Команда запроса информации о последнем платеже: /last_payment 1
-        if (cmd === "/last_payment") {
-          if (!targetTableNum) {
-            ctx.waitUntil(sendTelegramMessage(env, chatId, "❌ <b>Ошибка:</b> Укажите номер стола!\nПример: <code>/last_payment 1</code>"));
-            return new Response("OK", { status: 200 });
-          }
-
-          const paymentDataStr = await env.BILLIARDS_KV.get(`last_payment:table_${targetTableNum}`);
-          if (!paymentDataStr) {
-            ctx.waitUntil(sendTelegramMessage(env, chatId, `ℹ️ Для стола №${targetTableNum} пока нет данных о платежах.`));
-            return new Response("OK", { status: 200 });
-          }
-
-          const pay = JSON.parse(paymentDataStr);
-          const dateStr = new Date(pay.timestamp * 1000).toLocaleString("ru-RU", { timeZone: "Asia/Bishkek" });
-          const statusText = pay.completed 
-            ? "🟢 <b>Успешно завершена</b> (время отыграно полностью)" 
-            : "🔴 <b>Не доиграна / Прервана</b> (свет погас или сеанс сброшен)";
-
-          const report = 
-            `<b>💳 Последний платеж: Стол №${targetTableNum}</b>\n\n` +
-            `💰 <b>Сумма:</b> ${pay.amount} сом\n` +
-            `👤 <b>Плательщик:</b> ${pay.payer}\n` +
-            `⏱ <b>Дата/Время:</b> ${dateStr}\n` +
-            `📌 <b>Статус сессии:</b> ${statusText}`;
-
-          ctx.waitUntil(sendTelegramMessage(env, chatId, report));
-          return new Response("OK", { status: 200 });
-        }
-
         // Команды статуса
         if (text.includes("Получить информацию") || cmd === "/status" || cmd === "/start") {
           const topic = cmd === "/status" && parts[1] 
@@ -119,14 +89,6 @@ export default {
           const targetTopic = `billiards/${env.CLUB_PREFIX}_table${targetTableNum}/cmd`;
 
           if (cmd === "/reset") {
-            const kvKey = `last_payment:table_${targetTableNum}`;
-            const existing = await env.BILLIARDS_KV.get(kvKey);
-            if (existing) {
-              let payObj = JSON.parse(existing);
-              payObj.completed = false;
-              await env.BILLIARDS_KV.put(kvKey, JSON.stringify(payObj));
-            }
-
             ctx.waitUntil(sendMqttWebSocket(env, targetTopic, { event: "RESET_SESSION", requestedBy: chatId }));
           } else if (cmd === "/test_light") {
             ctx.waitUntil(sendMqttWebSocket(env, targetTopic, { event: "TEST_LIGHT", requestedBy: chatId }));
@@ -140,7 +102,7 @@ export default {
         }
       }
 
-      // 💳 5. Входящий Webhook от Finik (Платежи)
+      // 💳 4. Входящий Webhook от Finik (Платежи)
       const { status, amount, transactionId, transactionType, fields } = bodyJson;
       if (status === "SUCCEEDED" && transactionType === "DEBIT") {
         const payerName = fields?.qrComment || "Неизвестный";
@@ -157,15 +119,6 @@ export default {
           if (match) tableNum = match[1];
         }
 
-        const paymentInfo = {
-          amount: Number(amount),
-          txId: transactionId,
-          payer: payerName,
-          timestamp: Math.floor(Date.now() / 1000),
-          completed: false 
-        };
-        await env.BILLIARDS_KV.put(`last_payment:table_${tableNum}`, JSON.stringify(paymentInfo));
-
         const targetTopic = `billiards/${deviceId}/cmd`;
         const payload = {
           event: "PAYMENT_SUCCESS",
@@ -174,25 +127,12 @@ export default {
           payer: payerName,
           deviceId: deviceId,
           tableName: tableName,
-          timestamp: paymentInfo.timestamp
+          timestamp: Math.floor(Date.now() / 1000)
         };
 
         console.log(`🚀 Payment success! Publishing to [${targetTopic}]`);
         ctx.waitUntil(sendMqttWebSocket(env, targetTopic, payload));
       }
-
-      // 📡 6. Входящие сообщения от ESP32 (окончание времени)
-      try {
-        if (bodyJson.event === "SESSION_EXPIRED" && bodyJson.tableNum) {
-          const kvKey = `last_payment:table_${bodyJson.tableNum}`;
-          const existing = await env.BILLIARDS_KV.get(kvKey);
-          if (existing) {
-            let payObj = JSON.parse(existing);
-            payObj.completed = true;
-            await env.BILLIARDS_KV.put(kvKey, JSON.stringify(payObj));
-          }
-        }
-      } catch (e) {}
 
       return new Response(JSON.stringify({ status: "ok" }), { status: 200 });
     } catch (err: any) {

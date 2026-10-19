@@ -1,6 +1,6 @@
 /**
- * Example Wrangler configuration file
- * Copy this file to wrangler.jsonc and fill in your real credentials
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
@@ -13,14 +13,17 @@
 	"upload_source_maps": true,
 	"kv_namespaces": [
 		{
-			"binding": "BILLIARDS_KV",
-			"id": "YOUR_KV_NAMESPACE_ID"
+		"binding": "KV_NAME",
+		"id": "YOUR_KV_NAMESPACE_ID_HERE"
 		}
 	],
 	"vars": {
-		"MQTT_BROKER_URL": "mqtts://YOUR_BROKER_HOST:8883",
-		"MQTT_USER": "YOUR_MQTT_USER",
-		"MQTT_PASS": "YOUR_MQTT_PASSWORD",
-		"TG_BOT_TOKEN": "TOKEN"
+		"MQTT_BROKER_URL": "mqtts://your-broker-url.emqxsl.com:8883",
+		"MQTT_USER": "your_mqtt_user",
+		"MQTT_PASS": "your_mqtt_password",
+		"TG_BOT_TOKEN": "YOUR_TELEGRAM_BOT_TOKEN_HERE",
+		"ADMIN_PASSWORD": "your_admin_password",
+  		"OPERATOR_PASSWORD": "your_operator_password",
+		"CLUB_PREFIX": "your_club_prefix"
 	}
 }
